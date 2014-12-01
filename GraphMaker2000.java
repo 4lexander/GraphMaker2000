@@ -44,7 +44,7 @@ public class GraphMaker2000 {
 		
 		// 2. get input data - from file
 		DataSet<String> text = env.readTextFile("file:///home/alex/Desktop/IMPRO/flinkxample/testfile0");		
-		
+		// 3. apply cool data transformations
 		DataSet<String> edges =
 				text
 				.flatMap(new LineSplitter())	//splits String in lines
