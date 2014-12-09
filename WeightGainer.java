@@ -9,7 +9,6 @@ import org.apache.flink.api.common.functions.CoGroupFunction;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
-import org.apache.flink.api.common.functions.JoinFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
@@ -39,44 +38,38 @@ public class WeightGainer {
 		DataSet<Tuple2<Long, Long[]>> neighborlist =	
 				mirrorededges					//uses mirrored edges so every vertex is captured
 				.groupBy(0)
-				.reduceGroup(new NeighborCollector2()) //outputs (vertex;{all neighbors})
-				//.filter(new NodeFilter(0.25)) //DEGREE DISTRIBUTION cancel some random neighbors by verge in brackets (for Math.random)
-				;	
+				.reduceGroup(new NeighborCollector2()); //outputs (vertex;{all neighbors})
+				//.filter(new NodeFilter(0.25)) //DEGREE DISTRIBUTION cancel some random neighbors by verge in brackets (for Math.random)					
 				
 		DataSet<Tuple3<Long, Long, Long[]>> firstjoin =
 				uniqueedges
 				.coGroup(neighborlist)			//uses neighbor list
 				.where(0).equalTo(0)			//joins on start-V
-				.with(new Linker1())			//outputs (start-V,end-V,neighbors of start-V)
-				;
+				.with(new Linker1());			//outputs (start-V,end-V,neighbors of start-V)				
 		
 		DataSet<Tuple3<Long, Long, Long[]>> secondjoin=
 				firstjoin
 				.coGroup(neighborlist).			//uses neighbor list
 				where(1).equalTo(0).			//joins on end-V
-				with(new Linker2())				//outputs (start-V,end-V,neighbors of start-V AND end-V)
-				;
+				with(new Linker2());			//outputs (start-V,end-V,neighbors of start-V AND end-V)
+				
 		DataSet<Tuple3<Long, Long, Integer>> finalgraph=
 				secondjoin
 				.flatMap(new FinalList())		//outputs (start-V,end-V,count of duplicate neighbors)
-				.filter(new WeightFilter())		//only allows for edges with weight >0
+				.filter(new WeightFilter());		//only allows for edges with weight >0
 				//.flatMap(new BackToString()) 	//converts back to string
-				;
+				
 //		DEGREE DISTRIBUTION
 //		DataSet<Tuple2<Integer,Integer>> degrees=
-//				finalgraph
-//				.flatMap(new NumberTurner())
-//				.groupBy(0)
-//				.aggregate(Aggregations.SUM, 1)
-//				;
+//				finalgraph.flatMap(new NumberTurner()).groupBy(0).aggregate(Aggregations.SUM, 1);
 		
 		// 4. specify where results go - in this case: write in file
 		finalgraph.writeAsText("file:///home/alex/Desktop/IMPRO/flinkxample/weightedEdges"+Math.random());
 
 		// 5. execute program
 		env.execute("WordCount Example");
-	}
-	//User defined functions
+	} // End of main method
+	//------------------------------User defined functions
 	public static final class UniqueEdges implements FlatMapFunction<String,Tuple2<Long,Long>>{
 		
 		@Override
@@ -84,7 +77,6 @@ public class WeightGainer {
 			for(String edge:in.split("\\n")){ //split by lines
 				String[] stringVertices = edge.split("\\s+"); //split by any number of spaces
 				Long[] longVertices={Long.parseLong(stringVertices[0]),Long.parseLong(stringVertices[1])}; //parse String to Long
-				//Long[] out1={longVertices[1]}; //following function requires array
 				out.collect(new Tuple2<Long,Long>(longVertices[0],longVertices[1]));
 			}
 		}
@@ -95,9 +87,7 @@ public class WeightGainer {
 		public void flatMap(String in, Collector<Tuple2<Long,Long>> out) throws Exception {
 			for(String edge:in.split("\\n")){ //split by lines
 				String[] stringVertices = edge.split("\\s+"); //split by any number of spaces
-				Long[] longVertices={Long.parseLong(stringVertices[0]),Long.parseLong(stringVertices[1])}; //parse String to Long
-				//Long[] out1={longVertices[1]}; //following function requires array
-				//Long[] out0={longVertices[0]}; //following function requires array
+				Long[] longVertices={Long.parseLong(stringVertices[0]),Long.parseLong(stringVertices[1])}; //parse String to Long		
 				out.collect(new Tuple2<Long,Long>(longVertices[0],longVertices[1]));
 				out.collect(new Tuple2<Long,Long>(longVertices[1],longVertices[0])); //Output vertices second time in reversed order
 			}
@@ -109,14 +99,11 @@ public class WeightGainer {
 			
 			public Integer countDuplicateNeighbors(Tuple3<Long,Long,Long[]> s){
 				int count=0;
-		
 				Long[] neighbors=s.f2;
 				Arrays.sort(neighbors);
-			
 				for(int i=0; i<neighbors.length-1;i++){
 					if(neighbors[i].equals(neighbors[i+1])){count++;}
-				}
-				return count;
+				}return count;
 			}
 			
 			@Override
@@ -146,24 +133,13 @@ public class WeightGainer {
 			}
 		}
 	}
-	public static final class Linker22 implements JoinFunction<Tuple3<Long, Long, Long[]>,Tuple2<Long, Long[]>,Tuple3<Long, Long, Long[]>>{
-
-
-		@Override
-		public Tuple3<Long, Long, Long[]> join(Tuple3<Long, Long, Long[]> edges,Tuple2<Long, Long[]> neighbors) throws Exception {
-			Long[] all_neighbors= (Long[]) ArrayUtils.addAll(edges.f2, neighbors.f1);
-			Long vertex1 = edges.f0;
-			Long vertex2 = edges.f1;
-			return(new Tuple3<Long, Long, Long[]>(vertex1, vertex2, all_neighbors));
-		}
-
-	}
+	
 	public static final class Linker2 implements CoGroupFunction<Tuple3<Long, Long, Long[]>,Tuple2<Long, Long[]>,Tuple3<Long, Long, Long[]>> {
 		@Override
 		public void coGroup(Iterable<Tuple3<Long, Long, Long[]>> edges,
 				Iterable<Tuple2<Long, Long[]>> neighbors,
 				Collector<Tuple3<Long, Long, Long[]>> out) throws Exception  {
-			// TODO Auto-generated method stub
+
 			Set<Long> new_neighbor_set = new HashSet<Long>(); 
 			for (Tuple2<Long, Long[]> val : neighbors) {
 				for(Long val2:val.f1){
